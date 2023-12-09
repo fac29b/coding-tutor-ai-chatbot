@@ -1,4 +1,4 @@
-const {Client, GatewayIntentBits, ButtonBuilder, ButtonStyle, ActionRowBuilder, ComponentType} = require("discord.js");
+const {Client, GatewayIntentBits, ButtonBuilder, ButtonStyle, ActionRowBuilder, ComponentType, Partials} = require("discord.js");
 require('dotenv').config()
 const {ACCESS_TOKEN_DISCORD} = process.env;
 const {ACCESS_TOKEN_OPENAI} = process.env;
@@ -8,7 +8,7 @@ const openai = new OpenAI({
     apiKey: ACCESS_TOKEN_OPENAI,
   });
 
-let log = [{ role: "system", content: "You are a code reviewer who off short reviews on code quality" }] // Initalises conversation log for code reviewer
+let log = [{ role: "system", content: "You are a code reviewer who offers short reviews on code quality, please give advice on how to improve the specified code. If there are any bugs please recommend a fix." }] // Initalises conversation log for code reviewer
 
 // Initialises discord client interations
 const client = new Client({
@@ -17,7 +17,8 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.DirectMessages
-    ]
+    ],
+    'partials': [Partials.Channel]
 });
 
 // Logs message to console
@@ -30,7 +31,7 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   // client listens for code block
-  if (message.content.startsWith('`') && message.content.endsWith('`')) {
+  if (message.content.startsWith('`') && message.content.endsWith('`') & message.guildId !== null) {
 
   // Button creation
   const firstButton = new ButtonBuilder()
@@ -69,7 +70,6 @@ const completion = await openai.chat.completions.create({
 
 // Sent code review to DMs
 message.author.send(completion.choices[0].message.content); //code review Response is logged to channel
-
 log.push({role: "system", content: completion.choices[0].message.content}) // code review is logged in conversation
 
     }
@@ -77,7 +77,26 @@ log.push({role: "system", content: completion.choices[0].message.content}) // co
       return;
     }
    })
+}
 
+// Listens for messages to DM's / responds with chat GPT
+
+if (message.guildId === null ) {
+
+  await message.channel.sendTyping(); // Notifies user bot is typing
+    
+  log.push({role: "user", content: `in less than 200 words respond to:  ${message.content}`}); // pushes user response to  log
+  
+  // Completion feeds message log to open AI and obtains response to replies in DMs
+  const completion2 = await openai.chat.completions.create({
+    messages: log,
+    model: "gpt-3.5-turbo",
+    max_tokens: 300
+  });
+  
+  message.channel.send(completion2.choices[0].message.content); // Response is logged to DMs
+  
+  log.push({role: "system", content: completion2.choices[0].message.content}) // Response pushed to log
 }
 
 });
