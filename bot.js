@@ -8,9 +8,7 @@ const openai = new OpenAI({
     apiKey: ACCESS_TOKEN_OPENAI,
   });
 
-let log = [{ role: "system", content: "You are a code reviewer who offers short reviews on code quality, please give advice on how to improve the specified code. If there are any bugs please recommend a fix." }] // Initalises conversation log for code reviewer
-let dmLog = [{ role: "system", content: "You are now chatting in DMs" }]; // Initializes conversation log for DMs
-
+let log = [{ role: "system", content: "You are a general friendly assistant and who is knowledgable about code." }] // Initalises conversation log for code reviewer
 
 // Initialises discord client interations
 const client = new Client({
@@ -22,26 +20,6 @@ const client = new Client({
     ],
     'partials': [Partials.Channel]
 });
-
-async function handleDM(message) {
-  dmLog.push({ role: "user", content: message.content });
-
-  // Adjust the number of past messages used based on your needs
-  const relevantDmLog = dmLog.length > 20 ? dmLog.slice(-20) : dmLog;
-
-  const prompt = relevantDmLog.map(m => `${m.role}: ${m.content}`).join("\n");
-
-  const completion = await openai.chat.completions.create({
-    prompt: prompt,
-    model: "gpt-3.5-turbo",
-    max_tokens: 150
-  });
-
-  const response = completion.choices[0].message.content;
-  dmLog.push({ role: "system", content: response });
-  await message.author.send(response);
-}
-
 
 
 
@@ -55,23 +33,7 @@ client.on("messageCreate", async (message) => {
   console.log(message);
   if (message.author.bot) return;
 
-  if (message.channel.type === 'DM') {
-    console.log("DM Detected:", message.content);
-    console.log("Handling DM message:", message.content); // Debug
-    await handleDM(message);
-
-    return; // Exit early if it's a DM
-  }
-
-  try {
-    if (message.content.endsWith("?")) {
-      await handleQuestionCommand(message);
-    } else if (message.content.startsWith('`') && message.content.endsWith('`')) {
-      await handleCodeReview(message);
-    }
-  } catch (error) {
-    console.error('Error in message handling:', error);
-  }
+// CODE REVIEW FEATURE
 
   // client listens for code block
   if (message.content.startsWith('`') && message.content.endsWith('`') & message.guildId !== null) {
@@ -142,10 +104,10 @@ if (message.guildId === null ) {
   log.push({role: "system", content: completion2.choices[0].message.content}) // Response pushed to log
 }
 
-async function handleQuestionCommand(message) {
 
-  dmLog.push({ role: "user", content: message.content });
+// GENERAL QUESTION FEATURE
 
+if (message.content.endsWith('?') & message.guildId !== null) {
 
   // Create buttons
   const yesButton = new ButtonBuilder()
@@ -180,15 +142,15 @@ async function handleQuestionCommand(message) {
       await interaction.deferReply({ ephemeral: true });
   
       // Perform the long-running task (e.g., sending a DM)
-      dmLog.push({ role: "user", content: message.content });
-      const completion = await openai.chat.completions.create({
-        messages: dmLog,
+      log.push({ role: "user", content: message.content });
+      const completion3 = await openai.chat.completions.create({
+        messages: log,
         model: "gpt-3.5-turbo",
-        max_tokens: 150
+        max_tokens: 300
       });
-      const response = completion.choices[0].message.content;
+      const response = completion3.choices[0].message.content;
       await message.author.send(response); // Send the answer directly in a DM
-      dmLog.push({ role: "system", content: response }); // Update the log
+      log.push({ role: "system", content: response }); // Update the log
   
       // Follow up with the interaction
       await interaction.editReply({ content: "I've sent you a private response." });
@@ -197,29 +159,7 @@ async function handleQuestionCommand(message) {
       await interaction.reply({ content: "Okay, no private help will be provided.", ephemeral: true });
     }
   });
-  
 
-  collector.on('end', collected => {
-    console.log(`Collected ${collected.size} interactions.`);
-  });
 }
-
-
-
-async function handleCodeReview(message) {
-  await message.channel.sendTyping();
-  log.push({ role: "user", content: `please review the following code: ${message.content}` });
-
-  const completion = await openai.chat.completions.create({
-    messages: log,
-    model: "gpt-3.5-turbo",
-    max_tokens: 1000
-  });
-
-  message.reply(completion.choices[0].message.content);
-  log.push({ role: "system", content: completion.choices[0].message.content });
-}
-
-
 });
 client.login(ACCESS_TOKEN_DISCORD);
